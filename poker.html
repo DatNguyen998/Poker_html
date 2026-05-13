@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texas Hold'em - V2.3 Cinematic Reward Edition</title>
+    <style>
+        :root {
+            --table-color: #0b6623;
+            --bg-color: #121212;
+            --text-color: #f4f4f4;
+            --card-bg: #fff;
+            --primary: #d4af37;
+            --danger: #ff4d4d;
+            --success: #00ffcc;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); overflow: hidden; }
+
+        #setup-screen, #game-screen, #game-over-screen {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        #game-screen, #game-over-screen { display: none; }
+
+        .panel { background: rgba(0, 0, 0, 0.85); padding: 30px; border-radius: 12px; border: 1px solid var(--primary); max-width: 600px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        .panel h1 { color: var(--primary); margin-bottom: 20px; font-weight: 300; letter-spacing: 2px; }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; color: var(--primary); font-size: 14px;}
+        .form-group input, .form-group select { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #333; background: #222; color: white; outline: none; }
+        button { background-color: var(--primary); color: #000; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-transform: uppercase; }
+        button:hover:not(:disabled) { background-color: #b5952f; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(212, 175, 55, 0.3); }
+
+        #game-screen { background: radial-gradient(circle, var(--table-color) 30%, #032009 100%); }
+        .top-bar { position: absolute; top: 15px; width: 95%; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(212, 175, 55, 0.3); backdrop-filter: blur(5px); }
+        .pot-area { position: absolute; top: 32%; text-align: center; font-size: 26px; color: var(--primary); font-weight: bold; letter-spacing: 1px;}
+        .community-cards { position: absolute; top: 42%; display: flex; gap: 12px; }
+        
+        .card { width: 65px; height: 95px; background: var(--card-bg); border-radius: 6px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 22px; font-weight: bold; box-shadow: 2px 4px 10px rgba(0,0,0,0.6); position: relative; }
+        .card.hidden { background: repeating-linear-gradient(45deg, #1a2a6c, #1a2a6c 10px, #112 10px, #112 20px); border: 2px solid #fff; color: transparent !important; }
+        .card.red { color: #d32f2f; }
+        .card.black { color: #212121; }
+
+        .player-container { position: absolute; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .player-info { background: rgba(0,0,0,0.8); padding: 8px 15px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; border: 1px solid #444; min-width: 120px; position: relative; transition: all 0.3s;}
+        .player-info.active { border-color: var(--primary); box-shadow: 0 0 15px rgba(212, 175, 55, 0.4); transform: scale(1.05); }
+        .player-info.fold { opacity: 0.4; filter: grayscale(100%); }
+        .player-cards { display: flex; gap: 4px; }
+        
+        .thinking-bar-container { width: 100%; height: 4px; background: #333; margin-top: 6px; border-radius: 2px; overflow: hidden; display: none; }
+        .active .thinking-bar-container { display: block; }
+        .thinking-bar { height: 100%; width: 100%; background: var(--primary); transform-origin: left; }
+        .active.is-bot .thinking-bar { animation: think 2.5s linear forwards; }
+        @keyframes think { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+        .analytics-panel { color: var(--success); font-size: 14px; font-family: monospace; text-shadow: 0 0 5px rgba(0,255,204,0.5); display: flex; flex-direction: column; align-items: flex-end; }
+        
+        #player-0 { bottom: 90px; left: 50%; transform: translateX(-50%); } 
+        #player-1 { top: 120px; left: 15%; }
+        #player-2 { top: 120px; right: 15%; }
+        #player-3 { top: 45%; left: 5%; }
+        #player-4 { top: 45%; right: 5%; }
+        #player-5 { top: 100px; left: 50%; transform: translateX(-50%); }
+        #player-6 { top: 250px; left: 10%; }
+
+        .controls { position: absolute; bottom: 15px; display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.85); padding: 15px 25px; border-radius: 12px; border: 1px solid #333; z-index: 10;}
+        .controls button:disabled { background: #444; color: #888; cursor: not-allowed; box-shadow: none; transform: none; }
+        .raise-wrapper { display: flex; align-items: center; background: #222; border-radius: 5px; padding: 2px; border: 1px solid #555; }
+        .raise-wrapper input { width: 80px; background: transparent; border: none; color: white; padding: 8px; outline: none; text-align: center; font-weight: bold;}
+        .raise-wrapper input:disabled { color: #666; }
+
+        .log { position: absolute; bottom: 120px; left: 20px; width: 280px; height: 160px; background: rgba(0,0,0,0.7); overflow-y: auto; padding: 12px; font-size: 12px; border-radius: 8px; font-family: monospace; border-left: 2px solid var(--primary); scroll-behavior: smooth; z-index: 5;}
+        .log div { margin-bottom: 4px; color: #ddd; }
+        .log .highlight { color: var(--primary); }
+
+        /* WINNER UI OVERLAY */
+        #winner-modal { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; opacity: 0; transition: opacity 0.4s ease-in-out; }
+        .winner-card { background: linear-gradient(145deg, #1a1a1a, #0d0d0d); padding: 40px 60px; border-radius: 20px; border: 2px solid var(--primary); text-align: center; box-shadow: 0 0 50px rgba(212, 175, 55, 0.4); transform: scale(0.8); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .winner-title { font-size: 24px; color: #aaa; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 10px; }
+        .winner-name { font-size: 48px; color: var(--primary); font-weight: bold; text-shadow: 0 5px 15px rgba(0,0,0,1); margin-bottom: 5px; }
+        .winner-reason { font-size: 20px; color: var(--success); font-weight: 600; margin-bottom: 25px; padding: 5px 15px; border: 1px solid var(--success); border-radius: 30px; display: inline-block;}
+        .winner-pot { font-size: 36px; color: #fff; font-family: monospace; font-weight: bold; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 10px;}
+
+    </style>
+</head>
+<body>
+
+    <div id="setup-screen">
+        <div class="panel">
+            <h1>TEXAS HOLD'EM - V2.3</h1>
+            <div class="form-group">
+                <label>Số lượng đối thủ (2 - 6):</label>
+                <input type="number" id="opponentsCount" min="2" max="6" value="6">
+            </div>
+            <div class="form-group">
+                <label>Khung thời gian (Phút):</label>
+                <select id="timeLimit">
+                    <option value="5">5 Phút (Blitz)</option>
+                    <option value="10" selected>10 Phút (Standard)</option>
+                    <option value="15">15 Phút (Deep Stack)</option>
+                </select>
+            </div>
+            <button onclick="startGame()">Khởi tạo trận đấu</button>
+        </div>
+    </div>
+
+    <div id="game-screen">
+        <div class="top-bar">
+            <div id="time-display" style="font-family: monospace; font-size: 16px;">T: 10:00</div>
+            <div id="round-display" style="font-weight: bold; color: var(--primary); letter-spacing: 1px;">STAGE: PRE-FLOP</div>
+            <div class="analytics-panel">
+                <span id="win-prob-display">Win Prob: --%</span>
+            </div>
+        </div>
+        
+        <div class="pot-area">POT<br>$<span id="pot-amount">0</span></div>
+        <div class="community-cards" id="community-cards"></div>
+        <div id="players-wrapper"></div>
+        <div class="log" id="game-log"></div>
+        
+        <div class="controls">
+            <button id="btn-fold" onclick="humanAction('fold')">Fold</button>
+            <button id="btn-check" onclick="humanAction('check')">Check/Call</button>
+            <div class="raise-wrapper">
+                <input type="number" id="raise-input" min="0" step="10" placeholder="$">
+                <button id="btn-raise" onclick="humanAction('raise')">Raise</button>
+            </div>
+        </div>
+
+        <!-- NEW WINNER OVERLAY -->
+        <div id="winner-modal">
+            <div class="winner-card" id="winner-card-inner">
+                <div class="winner-title">Ngôi Vương Ván Đấu</div>
+                <div class="winner-name" id="ui-winner-name">USER</div>
+                <div class="winner-reason" id="ui-winner-reason">FLUSH</div>
+                <div class="winner-pot" id="ui-winner-pot">+$2000</div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="game-over-screen">
+        <div class="panel">
+            <h1>THỐNG KÊ CHUNG CUỘC</h1>
+            <div id="final-results" style="margin-bottom: 25px; font-size: 16px; text-align: left; line-height: 1.6; font-family: monospace;"></div>
+            <button onclick="location.reload()">Khởi tạo lại</button>
+        </div>
+    </div>
+
+<script>
+    const suits = ['♠', '♥', '♦', '♣'];
+    const values = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
+    const STARTING_CHIPS = 1000;
+    
+    let deck = [], players = [], communityCards = [];
+    let pot = 0, currentBet = 0, turnIndex = 0, gameTimer, timeLeft, stage = 0;
+    let activePlayers = 0, playersActed = 0;
+
+    function startGame() {
+        const oppCount = parseInt(document.getElementById('opponentsCount').value);
+        const timeMins = parseInt(document.getElementById('timeLimit').value);
+        if(oppCount < 2 || oppCount > 6) return alert("Hệ thống tối ưu cho 2-6 bot.");
+
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'flex';
+
+        players.push({ id: 0, name: "USER", chips: STARTING_CHIPS, cards: [], bet: 0, folded: false, isHuman: true });
+        for(let i = 1; i <= oppCount; i++) {
+            players.push({ id: i, name: `AI_BOT_${i}`, chips: STARTING_CHIPS, cards: [], bet: 0, folded: false, isHuman: false });
+        }
+
+        renderPlayers();
+        timeLeft = timeMins * 60;
+        updateTimerDisplay();
+        gameTimer = setInterval(() => {
+            timeLeft--;
+            updateTimerDisplay();
+            if(timeLeft <= 0) endGame();
+        }, 1000);
+
+        startNewHand();
+    }
+
+    function createDeck() {
+        deck = [];
+        for (let s = 0; s < suits.length; s++) {
+            for (let v = 0; v < values.length; v++) {
+                deck.push({ suit: suits[s], value: values[v], rank: v + 2 });
+            }
+        }
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+    }
+
+    function startNewHand() {
+        createDeck();
+        communityCards = []; pot = 0; currentBet = 20; stage = 0; 
+        activePlayers = players.length;
+        playersActed = 0; 
+
+        players.forEach(p => {
+            if(p.chips <= 0) {
+                p.chips = STARTING_CHIPS;
+                logMsg(`[SYSTEM] Bơm thanh khoản $${STARTING_CHIPS} cho ${p.name}`);
+            }
+            p.cards = [deck.pop(), deck.pop()];
+            p.bet = 0; p.folded = false;
+        });
+
+        logMsg("<span class='highlight'>--- INITIATING NEW HAND ---</span>");
+        updateUI();
+        calculateWinProbability();
+        turnIndex = 0;
+        processTurn();
+    }
+
+    function nextTurn() {
+        turnIndex = (turnIndex + 1) % players.length;
+        processTurn();
+    }
+
+    function processTurn() {
+        if(checkHandEnd()) return;
+
+        if (playersActed >= activePlayers) {
+            nextStage();
+            return;
+        }
+
+        let p = players[turnIndex];
+        
+        if(p.folded) { nextTurn(); return; }
+        if (p.chips === 0) { playersActed++; nextTurn(); return; }
+
+        updateUI();
+
+        if(p.isHuman) {
+            enableControls(true);
+            let callAmt = currentBet - p.bet;
+            document.getElementById('btn-check').innerText = callAmt > 0 ? `Call ($${callAmt})` : `Check`;
+            
+            let raiseInput = document.getElementById('raise-input');
+            let minRaise = callAmt > 0 ? callAmt + 20 : 20;
+            raiseInput.min = minRaise;
+            raiseInput.max = p.chips;
+            raiseInput.value = minRaise;
+        } else {
+            enableControls(false);
+            setTimeout(() => aiLogic(p), 2500); 
+        }
+    }
+
+    function nextStage() {
+        players.forEach(p => p.bet = 0);
+        currentBet = 0;
+        playersActed = 0; 
+        stage++;
+        turnIndex = 0; 
+        
+        if(stage === 1) communityCards.push(deck.pop(), deck.pop(), deck.pop());
+        else if(stage === 2 || stage === 3) communityCards.push(deck.pop());
+        else if(stage > 3) return showdown();
+        
+        if(stage <= 3) {
+            logMsg(`[STAGE] Chuyển đổi sang ${["Pre-Flop", "Flop", "Turn", "River"][stage]}`);
+            updateUI();
+            calculateWinProbability();
+            processTurn();
+        }
+    }
+
+    function humanAction(action) {
+        let p = players[0];
+        let callAmt = currentBet - p.bet;
+        let actValue = 0;
+
+        if(action === 'raise') {
+            let inputVal = parseInt(document.getElementById('raise-input').value);
+            if(isNaN(inputVal) || inputVal <= callAmt) {
+                alert(`Lượng Raise phải lớn hơn Call ($${callAmt}).`);
+                return;
+            }
+            if(inputVal > p.chips) inputVal = p.chips;
+            actValue = inputVal;
+        }
+
+        enableControls(false);
+        executeAction(p, action, actValue);
+        nextTurn();
+    }
+
+    function aiLogic(bot) {
+        let callAmt = currentBet - bot.bet;
+        let action = 'check';
+        let actValue = 0;
+        
+        let rand = Math.random();
+        if (callAmt > 0) {
+            if (rand < 0.15) action = 'fold';
+            else if (rand > 0.85 && bot.chips > callAmt + 20) {
+                action = 'raise';
+                actValue = callAmt + Math.floor(Math.random() * 50) + 20;
+            } else action = 'call';
+        } else {
+            if (rand < 0.15) {
+                action = 'raise';
+                actValue = Math.floor(Math.random() * 50) + 20;
+            }
+        }
+        executeAction(bot, action, actValue);
+        nextTurn();
+    }
+
+    function executeAction(p, action, actValue = 0) {
+        if(action === 'fold') {
+            p.folded = true; 
+            activePlayers--; 
+            logMsg(`${p.name} quyết định Fold.`);
+        } else if(action === 'check' || action === 'call') {
+            let amountToCall = Math.min(currentBet - p.bet, p.chips);
+            p.chips -= amountToCall; p.bet += amountToCall; pot += amountToCall;
+            playersActed++; 
+            logMsg(`${p.name} ${amountToCall > 0 ? 'Call $' + amountToCall : 'Check'}.`);
+        } else if(action === 'raise') {
+            let actualRaise = Math.min(actValue, p.chips);
+            p.chips -= actualRaise; p.bet += actualRaise;
+            currentBet = p.bet; pot += actualRaise;
+            playersActed = 1; 
+            logMsg(`${p.name} <span class="highlight">Raise lên $${currentBet}</span>.`);
+        }
+    }
+
+    function checkHandEnd() {
+        if(activePlayers === 1) {
+            let winner = players.find(p => !p.folded);
+            winner.chips += pot;
+            
+            triggerWinOverlay(winner.name, "ĐỐI THỦ RÚT LUI", pot);
+            
+            setTimeout(() => {
+                closeWinOverlay();
+                startNewHand();
+            }, 4000);
+            return true;
+        }
+        return false;
+    }
+
+    function showdown() {
+        logMsg("<span class='highlight'>--- ANALYZING SHOWDOWN ---</span>");
+        updateUI(true);
+
+        let bestScore = -1; let winners = []; let winReason = "";
+        
+        players.forEach(p => {
+            if(!p.folded) {
+                let evalResult = evaluateHandDetail([...p.cards, ...communityCards]);
+                logMsg(`${p.name} Hand: ${evalResult.name}`);
+                
+                if(evalResult.score > bestScore) { 
+                    bestScore = evalResult.score; 
+                    winners = [p]; 
+                    winReason = evalResult.name;
+                } 
+                else if(evalResult.score === bestScore) {
+                    winners.push(p);
+                }
+            }
+        });
+
+        let winAmt = Math.floor(pot / winners.length);
+        winners.forEach(w => w.chips += winAmt);
+        
+        let winnerNames = winners.map(w => w.name).join(", ");
+        triggerWinOverlay(winnerNames, winReason, pot);
+
+        setTimeout(() => {
+            closeWinOverlay();
+            startNewHand();
+        }, 5000);
+    }
+
+    // SEMANTIC HAND EVALUATION ENGINE
+    function evaluateHandDetail(cards) {
+        if(cards.length < 5) return {score: 0, name: "High Card"};
+        let ranks = cards.map(c => c.rank).sort((a, b) => b - a);
+        let counts = {};
+        ranks.forEach(r => counts[r] = (counts[r] || 0) + 1);
+        
+        let isFlush = false; let suitsCount = {};
+        cards.forEach(c => {
+            suitsCount[c.suit] = (suitsCount[c.suit] || 0) + 1;
+            if(suitsCount[c.suit] >= 5) isFlush = true;
+        });
+
+        let uniqueRanks = [...new Set(ranks)];
+        let isStraight = false;
+        let straightHigh = 0;
+        for(let i = 0; i <= uniqueRanks.length - 5; i++) {
+            if(uniqueRanks[i] - uniqueRanks[i+4] === 4) {
+                isStraight = true;
+                straightHigh = uniqueRanks[i];
+                break;
+            }
+        }
+        
+        if(!isStraight && uniqueRanks.includes(14) && uniqueRanks.includes(5) && uniqueRanks.includes(4) && uniqueRanks.includes(3) && uniqueRanks.includes(2)) {
+            isStraight = true;
+            straightHigh = 5;
+        }
+
+        let pairs = 0, threes = 0, fours = 0;
+        Object.values(counts).forEach(c => {
+            if(c === 2) pairs++; if(c === 3) threes++; if(c === 4) fours++;
+        });
+
+        if (isFlush && isStraight && straightHigh === 14) return {score: 10000 + ranks[0], name: "ROYAL FLUSH"};
+        if (isFlush && isStraight) return {score: 9000 + straightHigh, name: "STRAIGHT FLUSH"};
+        if (fours > 0) return {score: 8000 + ranks[0], name: "FOUR OF A KIND"};
+        if (threes > 0 && pairs > 0) return {score: 7000 + ranks[0], name: "FULL HOUSE"};
+        if (isFlush) return {score: 6000 + ranks[0], name: "FLUSH"};
+        if (isStraight) return {score: 5000 + straightHigh, name: "STRAIGHT"};
+        if (threes > 0) return {score: 4000 + ranks[0], name: "THREE OF A KIND"};
+        if (pairs > 1) return {score: 3000 + ranks[0], name: "TWO PAIR"};
+        if (pairs === 1) return {score: 2000 + ranks[0], name: "PAIR"};
+        return {score: ranks[0], name: "HIGH CARD"};
+    }
+
+    // Bọc lại hàm phân tích xác suất sử dụng hàm mới
+    function evaluateHand(cards) {
+        return evaluateHandDetail(cards).score;
+    }
+
+    function calculateWinProbability() {
+        let p0 = players[0];
+        let probDisplay = document.getElementById('win-prob-display');
+        
+        if (p0.folded) { probDisplay.innerText = "Win Prob: 0.0%"; return; }
+        
+        const ITERATIONS = 300;
+        let wins = 0;
+        let activeOpponents = players.filter(p => p.id !== 0 && !p.folded).length;
+        
+        if(activeOpponents === 0) { probDisplay.innerText = "Win Prob: 100%"; return; }
+
+        let availableDeck = deck.map(c => ({...c})); 
+        
+        for(let i = 0; i < ITERATIONS; i++) {
+            let tempDeck = [...availableDeck].sort(() => 0.5 - Math.random());
+            let simCommCards = [...communityCards];
+            
+            while(simCommCards.length < 5) { simCommCards.push(tempDeck.pop()); }
+            
+            let userScore = evaluateHand([...p0.cards, ...simCommCards]);
+            let isWin = true;
+            
+            for(let j = 0; j < activeOpponents; j++) {
+                let oppCards = [tempDeck.pop(), tempDeck.pop()];
+                let oppScore = evaluateHand([...oppCards, ...simCommCards]);
+                if(oppScore >= userScore) { isWin = false; break; }
+            }
+            if(isWin) wins++;
+        }
+        
+        let winRate = ((wins / ITERATIONS) * 100).toFixed(1);
+        probDisplay.innerText = `Win Prob: ${winRate}%`;
+        probDisplay.style.color = winRate > 60 ? "#00ffcc" : (winRate < 30 ? "#ff4d4d" : "#d4af37");
+    }
+
+    // UI RENDER METHODS
+    function triggerWinOverlay(name, reason, potAmount) {
+        let modal = document.getElementById('winner-modal');
+        let card = document.getElementById('winner-card-inner');
+        
+        document.getElementById('ui-winner-name').innerText = name;
+        document.getElementById('ui-winner-reason').innerText = reason;
+        document.getElementById('ui-winner-pot').innerText = `+$${potAmount}`;
+        
+        modal.style.display = 'flex';
+        // Force reflow for transition
+        void modal.offsetWidth; 
+        modal.style.opacity = 1;
+        card.style.transform = 'scale(1)';
+    }
+
+    function closeWinOverlay() {
+        let modal = document.getElementById('winner-modal');
+        let card = document.getElementById('winner-card-inner');
+        modal.style.opacity = 0;
+        card.style.transform = 'scale(0.8)';
+        setTimeout(() => modal.style.display = 'none', 400);
+    }
+
+    function updateUI(showAllCards = false) {
+        document.getElementById('pot-amount').innerText = pot;
+        document.getElementById('round-display').innerText = `STAGE: ${["PRE-FLOP", "FLOP", "TURN", "RIVER", "SHOWDOWN"][stage]}`;
+
+        let commHtml = "";
+        for(let i=0; i<5; i++) {
+            commHtml += i < communityCards.length ? createCardHTML(communityCards[i]) : `<div class="card hidden"></div>`;
+        }
+        document.getElementById('community-cards').innerHTML = commHtml;
+
+        players.forEach(p => {
+            let el = document.getElementById(`pinfo-${p.id}`);
+            if(!el) return;
+            let isActive = turnIndex === p.id;
+            let isBotClass = !p.isHuman ? "is-bot" : "";
+            el.className = `player-info ${isActive ? 'active' : ''} ${p.folded ? 'fold' : ''} ${isBotClass}`;
+            
+            el.innerHTML = `
+                <div style="font-weight:bold; color:var(--primary)">${p.name}</div>
+                <div>$${p.chips}</div>
+                <div style="color:#aaa; font-size:11px;">Bet: $${p.bet}</div>
+                <div class="thinking-bar-container"><div class="thinking-bar"></div></div>
+            `;
+
+            let cardCont = document.getElementById(`pcards-${p.id}`);
+            if(p.folded) cardCont.innerHTML = "";
+            else if(p.isHuman || showAllCards) cardCont.innerHTML = createCardHTML(p.cards[0]) + createCardHTML(p.cards[1]);
+            else cardCont.innerHTML = `<div class="card hidden" style="width:45px;height:65px;"></div><div class="card hidden" style="width:45px;height:65px;"></div>`;
+        });
+    }
+
+    function renderPlayers() {
+        let wrapper = document.getElementById('players-wrapper');
+        wrapper.innerHTML = "";
+        players.forEach(p => {
+            let div = document.createElement('div');
+            div.className = "player-container"; div.id = `player-${p.id}`;
+            div.innerHTML = `<div class="player-info" id="pinfo-${p.id}"></div><div class="player-cards" id="pcards-${p.id}"></div>`;
+            wrapper.appendChild(div);
+        });
+    }
+
+    function createCardHTML(card) {
+        if(!card) return "";
+        let colorClass = (card.suit === '♥' || card.suit === '♦') ? 'red' : 'black';
+        return `<div class="card ${colorClass}">${card.value}<br><span style="font-size:26px">${card.suit}</span></div>`;
+    }
+
+    function logMsg(msg) {
+        let log = document.getElementById('game-log');
+        log.innerHTML += `<div>> ${msg}</div>`;
+        log.scrollTop = log.scrollHeight;
+    }
+
+    function enableControls(enable) {
+        document.getElementById('btn-fold').disabled = !enable;
+        document.getElementById('btn-check').disabled = !enable;
+        document.getElementById('btn-raise').disabled = !enable;
+        document.getElementById('raise-input').disabled = !enable;
+    }
+
+    function updateTimerDisplay() {
+        let m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+        let s = (timeLeft % 60).toString().padStart(2, '0');
+        document.getElementById('time-display').innerText = `TIME: ${m}:${s}`;
+    }
+
+    function endGame() {
+        clearInterval(gameTimer);
+        document.getElementById('game-screen').style.display = 'none';
+        document.getElementById('game-over-screen').style.display = 'flex';
+        
+        let sorted = [...players].sort((a, b) => b.chips - a.chips);
+        let resHtml = "";
+        sorted.forEach((p, idx) => { resHtml += `[${idx+1}] ${p.name.padEnd(10, ' ')} : $${p.chips}<br>`; });
+        document.getElementById('final-results').innerHTML = resHtml;
+    }
+</script>
+</body>
+</html>
